@@ -1,0 +1,30 @@
+# Python 依赖包(本机安装,不入库)
+certifi/
+certifi-*.dist-info/
+charset_normalizer/
+charset_normalizer-*.dist-info/
+idna/
+idna-*.dist-info/
+requests/
+requests-*.dist-info/
+urllib3/
+urllib3-*.dist-info/
+
+# 可执行/二进制
+bin/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 临时/缓存
+*.tmp
+*.log
+.cache/

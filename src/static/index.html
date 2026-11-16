@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>A股活跃市值 · 0AMV · 宽基ETF监控</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background:#15171a; color:#e0e0e0; margin:0; padding:18px; }
+  .header { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  h1 { font-size:17px; margin:0; font-weight:600; }
+  .cards { display:grid; grid-template-columns: repeat(4,1fr); gap:12px; margin-bottom:14px; }
+  .card { background:#22252a; border-radius:8px; padding:13px 15px; }
+  .card .label { font-size:11px; color:#888; }
+  .card .value { font-size:22px; font-weight:bold; margin:5px 0 2px; }
+  .card .sub { font-size:11px; color:#777; line-height:1.5; }
+  .red { color:#ff5c5c; } .green { color:#3ec77a; }
+  .panel { background:#22252a; border-radius:8px; padding:14px; margin-bottom:14px; }
+  .panel h2 { font-size:13px; margin:0 0 8px; color:#bbb; font-weight:500; }
+  #amv_chart { width:100%; height:380px; }
+  #av_chart { width:100%; height:320px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th,td { padding:6px 10px; text-align:right; border-bottom:1px solid #2e3134; }
+  th { color:#888; font-weight:normal; }
+  th:first-child,td:first-child { text-align:left; }
+  th:nth-child(2),td:nth-child(2) { text-align:left; }
+  .refresh { cursor:pointer; background:#2e3134; border:1px solid #444; color:#ddd; padding:5px 12px; border-radius:4px; font-size:12px; }
+  .refresh:hover { background:#3a3d40; }
+  .updated { font-size:11px; color:#777; margin-right:10px; }
+  .warn { color:#faad14; font-size:11px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>A股活跃市值 · 0AMV · 宽基ETF国家队监控</h1>
+  <div><span class="updated" id="updated"></span><button class="refresh" onclick="refreshAll()">刷新</button></div>
+</div>
+
+<div class="cards">
+  <div class="card"><div class="label">活跃市值(0AMV口径)</div><div class="value" id="av_value">-</div><div class="sub" id="av_sub">-</div></div>
+  <div class="card"><div class="label">0AMV VAR1(沪市活跃资金,亿元)</div><div class="value" id="amv_var1">-</div><div class="sub" id="amv_sub">-</div></div>
+  <div class="card"><div class="label">今日全市场成交额</div><div class="value" id="rt_amount">-</div><div class="sub" id="rt_sub">-</div></div>
+  <div class="card"><div class="label">全市场换手率</div><div class="value" id="rt_turnover">-</div><div class="sub" id="rt_sub2">-</div></div>
+</div>
+
+<div class="panel">
+  <h2>活跃市值走势 — 0AMV活跃市值日K(万亿) · 蜡烛 + MA10</h2>
+  <div id="av_chart"></div>
+</div>
+
+<div class="panel">
+  <h2>0AMV 活跃市值趋势 — 成交额红绿柱 · VAR1(EMA10) · 成本均线 C5/C13/C34/∞（亿元）</h2>
+  <div id="amv_chart"></div>
+</div>
+
+<div class="panel">
+  <h2>重点宽基ETF 行情/份额 <span class="warn" id="etf_status"></span></h2>
+  <table id="etf_table">
+    <thead><tr><th>代码</th><th>名称</th><th>最新价</th><th>涨跌幅</th><th>成交额(亿)</th><th>换手率</th><th>规模(亿)</th><th>份额(亿份)</th><th>数据日期</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+const amvChart = echarts.init(document.getElementById("amv_chart"));
+const avChart = echarts.init(document.getElementById("av_chart"));
+const fmt = n => (n==null||isNaN(n)) ? "-" : (typeof n=="number" ? n.toLocaleString() : n);
+
+async function load(url){
+  try { return await (await fetch(url)).json(); }
+  catch(e){ return {error:String(e)}; }
+}
+
+async function loadRealtime(){
+  const d = await load("/api/realtime");
+  if(d.error){ document.getElementById("rt_sub").textContent=d.error; return; }
+  document.getElementById("rt_amount").textContent = fmt(d.total_amount)+" 亿";
+  document.getElementById("rt_turnover").textContent = d.turnover+"%";
+  document.getElementById("rt_sub").textContent = "沪"+fmt(d.sh_amount)+" 深"+fmt(d.sz_amount)+" 北"+fmt(d.bj_amount)+" · "+d.time;
+  document.getElementById("rt_sub2").textContent = "流通市值 "+fmt(d.total_nmc)+"亿 · "+fmt(d.n_stocks)+"只";
+}
+
+async function loadActiveValue(){
+  const d = await load("/api/active_value");
+  if(d.error){ document.getElementById("av_sub").textContent=d.error; return; }
+  document.getElementById("av_value").textContent = d.value_wy+" 万亿";
+  document.getElementById("av_sub").textContent = "0AMV: EMA(沪市AMOUNT,0.1)/1e7 × 因子"+d.factor+" · "+d.last_date;
+  avChart.setOption({
+    grid:{left:62,right:25,top:30,bottom:32},
+    legend:{data:["活跃市值","MA10"],textStyle:{color:"#ccc"},top:2},
+    tooltip:{trigger:"axis",axisPointer:{type:"cross"},
+      formatter:ps=>{
+        let s=ps[0].axisValue+"<br/>";
+        for(const p of ps){
+          if(p.seriesName==="活跃市值"&&Array.isArray(p.value))
+            s+=p.marker+"活跃市值: 开"+p.value[0]+" 收"+p.value[1]+" 低"+p.value[2]+" 高"+p.value[3]+" 万亿<br/>";
+          else
+            s+=p.marker+p.seriesName+": "+(p.value==null?"-":p.value+" 万亿")+"<br/>";
+        }
+        return s;
+      }},
+    xAxis:{type:"category",data:d.trend_dates,axisLabel:{color:"#888",fontSize:10,interval:Math.max(0,Math.floor(d.trend_dates.length/12)-1),formatter:v=>String(v).slice(5)}},
+    yAxis:{type:"value",min:Math.floor(d.y_min||0),max:Math.ceil(d.y_max||0),interval:1,axisLabel:{color:"#888",formatter:v=>v+" 万亿"}},
+    series:[
+      {name:"活跃市值",type:"candlestick",data:d.ohlc,itemStyle:{color:"#ff5c5c",color0:"#3ec77a",borderColor:"#ff5c5c",borderColor0:"#3ec77a"}},
+      {name:"MA10",type:"line",data:d.ma10,smooth:true,symbol:"none",lineStyle:{color:"#3b9eff",width:1.8}},
+    ]
+  });
+}
+
+async function load0amv(){
+  const d = await load("/api/0amv");
+  if(d.error){ document.getElementById("amv_sub").textContent=d.error; return; }
+  document.getElementById("amv_var1").textContent = d.latest.VAR1+" 亿";
+  document.getElementById("amv_sub").textContent = d.latest.date+" · "+d.latest.bar+" · 成交额 "+d.latest.amount+"亿";
+  const bars = d.amount.map((v,i)=>({value:v,itemStyle:{color:d.bar[i]>0?"#ff5c5c":d.bar[i]<0?"#3ec77a":"#555"}}));
+  amvChart.setOption({
+    grid:{left:60,right:30,top:30,bottom:30},
+    legend:{data:["VAR1","C5","C13","C34","∞"],textStyle:{color:"#ccc"},top:2},
+    tooltip:{trigger:"axis",axisPointer:{type:"cross"}},
+    xAxis:{type:"category",data:d.dates,axisLabel:{color:"#888",fontSize:10}},
+    yAxis:{type:"value",scale:true,axisLabel:{color:"#888"}},
+    series:[
+      {name:"成交额",type:"bar",data:bars,barWidth:"55%"},
+      {name:"VAR1",type:"line",data:d.VAR1,smooth:true,symbol:"none",lineStyle:{color:"#faad14",width:2.5}},
+      {name:"C5",type:"line",data:d.C5,smooth:true,symbol:"none",lineStyle:{color:"#3b9eff",width:1}},
+      {name:"C13",type:"line",data:d.C13,smooth:true,symbol:"none",lineStyle:{color:"#13c2c2",width:1}},
+      {name:"C34",type:"line",data:d.C34,smooth:true,symbol:"none",lineStyle:{color:"#a856ff",width:1}},
+      {name:"∞",type:"line",data:d.inf,smooth:true,symbol:"none",lineStyle:{color:"#bbb",width:1}},
+    ]
+  });
+}
+
+async function loadEtf(){
+  const d = await load("/api/etf");
+  const tb = document.querySelector("#etf_table tbody");
+  document.getElementById("etf_status").textContent = d.available ? "" : ("· "+d.msg);
+  tb.innerHTML = "";
+  if(!d.data.length){ tb.innerHTML='<tr><td colspan="9" style="text-align:center;color:#888;padding:14px">'+(d.msg||"无数据")+'</td></tr>'; return; }
+  for(const x of d.data){
+    const pct = x.pct==null ? "-" : (x.pct>0 ? '<span class="red">+'+x.pct+'%</span>' : '<span class="green">'+x.pct+'%</span>');
+    const amt = x.amount==null ? "-" : (x.amount/1e8).toFixed(2);
+    const scale = x.scale==null ? "-" : (x.scale/1e8).toFixed(0);
+    const share = x.share==null ? "-" : x.share.toFixed(0);
+    tb.innerHTML += '<tr><td>'+x.code+'</td><td>'+x.name+'</td><td>'+(x.price==null?"-":x.price)+'</td><td>'+pct+'</td><td>'+amt+'</td><td>'+(x.turnover==null?"-":x.turnover+"%")+'</td><td>'+scale+'</td><td>'+share+'</td><td>'+(x.date||"-")+'</td></tr>';
+  }
+}
+
+async function refreshAll(){
+  document.getElementById("updated").textContent = "加载中...";
+  await Promise.all([loadRealtime(),loadActiveValue(),load0amv(),loadEtf()]);
+  document.getElementById("updated").textContent = "更新于 "+new Date().toLocaleTimeString();
+}
+refreshAll();
+setInterval(()=>{ loadRealtime(); loadEtf(); }, 60000);
+setInterval(()=>{ loadActiveValue(); load0amv(); }, 300000);
+window.addEventListener("resize",()=>{ amvChart.resize(); avChart.resize(); });
+</script>
+</body>
+</html>
