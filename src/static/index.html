@@ -100,7 +100,11 @@ async function loadActiveValue(){
         return s;
       }},
     xAxis:{type:"category",data:d.trend_dates,axisLabel:{color:"#888",fontSize:10,interval:Math.max(0,Math.floor(d.trend_dates.length/12)-1),formatter:v=>String(v).slice(5)}},
-    yAxis:{type:"value",min:Math.floor(d.y_min||0),max:Math.ceil(d.y_max||0),interval:1,axisLabel:{color:"#888",formatter:v=>v+" 万亿"}},
+    yAxis:{type:"value",scale:true,axisLabel:{color:"#888",formatter:v=>v+" 万亿"}},
+    dataZoom:[
+      {type:"inside",start:76,end:100},
+      {type:"slider",start:76,end:100,height:18,bottom:4,textStyle:{color:"#888"},dataBackground:{lineStyle:{color:"#444"},areaStyle:{color:"#2a2d32"}},selectedDataBackground:{lineStyle:{color:"#888"},areaStyle:{color:"#3a3d42"}}}
+    ],
     series:[
       {name:"活跃市值",type:"candlestick",data:d.ohlc,itemStyle:{color:"#ff5c5c",color0:"#3ec77a",borderColor:"#ff5c5c",borderColor0:"#3ec77a"}},
       {name:"MA10",type:"line",data:d.ma10,smooth:true,symbol:"none",lineStyle:{color:"#3b9eff",width:1.8}},
